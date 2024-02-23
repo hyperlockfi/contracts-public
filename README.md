@@ -1,5 +1,8 @@
 # Hyperlock Finance Contracts
 
+> [!WARNING]  
+> This code has yet to complete a formal audit
+
 This is the public repository containing the Hyperlock Finance smart contracts.
 
 Hyperlock is a yield & metagovernance protocol built on Thruster and optimized for Blast
