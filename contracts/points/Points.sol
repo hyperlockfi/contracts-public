@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.6.12;
+pragma experimental ABIEncoderV2;
 
 import { SafeMath } from "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import { Ownable } from "@openzeppelin/contracts-0.6/access/Ownable.sol";
 import { MerkleProof } from "@openzeppelin/contracts-0.6/cryptography/MerkleProof.sol";
+import { Multicall } from "../nfp/Multicall.sol";
 
 /**
  * @author  Hyperlock Finance
@@ -12,7 +14,7 @@ import { MerkleProof } from "@openzeppelin/contracts-0.6/cryptography/MerkleProo
  *          - Allocate points to pools
  *          - Manage roots
  */
-contract Points is Ownable {
+contract Points is Ownable, Multicall {
     using SafeMath for uint256;
 
     /* -------------------------------------------------------------------
@@ -42,6 +44,9 @@ contract Points is Ownable {
 
     /// @dev epoch => root
     mapping(uint256 => bytes32) public roots;
+
+    /// @dev user => salt => claimed
+    mapping(address => mapping(bytes32 => bool)) public isClaimedZero;
 
     /* -------------------------------------------------------------------
        Events 
@@ -89,9 +94,18 @@ contract Points is Ownable {
      * @param _proof The merkle root proof
      * @param _amount The amount of points to claim
      */
-    function claimZero(bytes32[] calldata _proof, uint256 _amount) external {
-        _claim(msg.sender, 0, _proof, _amount);
-        balanceOf[msg.sender] += _amount;
+    function claimZero(
+        bytes32[] calldata _proof,
+        bytes32 _salt,
+        uint256 _amount
+    ) external {
+        require(!isClaimedZero[msg.sender][_salt], "already claimed");
+        bytes32 leaf = keccak256(abi.encodePacked(msg.sender, _salt, _amount));
+        require(MerkleProof.verify(_proof, roots[0], leaf), "invalid proof");
+
+        isClaimedZero[msg.sender][_salt] = true;
+        balanceOf[msg.sender] = balanceOf[msg.sender].add(_amount);
+
         emit Allocated(msg.sender, 0, address(0), _amount);
     }
 
@@ -150,11 +164,11 @@ contract Points is Ownable {
         require(pools[_pool], "invalid pool");
         require(remaining >= _amount, "not enough remaining balance");
 
-        allocOf[_pool] += _amount;
-        allocOfAt[_pool][epoch] += _amount;
+        allocOf[_pool] = allocOf[_pool].add(_amount);
+        allocOfAt[_pool][epoch] = allocOfAt[_pool][epoch].add(_amount);
 
-        balanceOf[msg.sender] += _amount;
-        allocatedOfAt[msg.sender][epoch] += _amount;
+        balanceOf[msg.sender] = balanceOf[msg.sender].add(_amount);
+        allocatedOfAt[msg.sender][epoch] = allocatedOfAt[msg.sender][epoch].add(_amount);
 
         emit Allocated(msg.sender, epoch, _pool, _amount);
     }

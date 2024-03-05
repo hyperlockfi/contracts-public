@@ -118,4 +118,6 @@ interface INonfungiblePositionManager is INonfungiblePositionManagerStruct, IERC
     function factory() external view returns (address);
 
     function tokenOfOwnerByIndex(address, uint256) external view returns (uint256);
+
+    function totalSupply() external view returns (uint256);
 }
