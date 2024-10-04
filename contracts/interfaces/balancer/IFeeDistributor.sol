@@ -1,28 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
 
-import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
-
 interface IFeeDistributor {
-    function claimToken(address user, IERC20 token) external returns (uint256);
+    function toggle_allow_checkpoint_token() external;
 
-    function claimTokens(address user, IERC20[] calldata tokens) external returns (uint256[] memory);
+    function claim(address user) external returns (uint256);
 
-    function getTokenTimeCursor(IERC20 token) external view returns (uint256);
+    function time_cursor() external view returns (uint256);
 
-    function checkpointUser(address user) external;
+    function token() external view returns (address);
 
-    function getUserTimeCursor(address user) external view returns (uint256);
+    function admin() external view returns (address);
 
-    function getTimeCursor() external view returns (uint256);
-
-    function depositToken(IERC20 token, uint256 amount) external;
-
-    function getNextNonce(address) external view returns (uint256);
-
-    function setOnlyCallerCheckWithSignature(
-        address,
-        bool,
-        bytes memory
-    ) external;
+    function time_cursor_of(address user) external view returns (uint256);
 }

@@ -30,11 +30,11 @@ interface IBooster {
 
     function poolInfo(uint256 _pid) external view returns (PoolInfo memory);
 
-    function distributeL2Fees(uint256 _amount) external;
-
     function lockIncentive() external view returns (uint256);
 
     function stakerIncentive() external view returns (uint256);
+
+    function staker() external view returns (address);
 
     function earmarkIncentive() external view returns (uint256);
 
@@ -52,6 +52,8 @@ interface IBooster {
 
     function boosterFeeHandler() external view returns (address);
 
+    function nfpBooster() external view returns (address);
+
     function calculateIncentives(uint256 rewardAmount)
         external
         view
@@ -62,14 +64,4 @@ interface IBooster {
             uint256 _rewardIncentive,
             uint256 _totalIncentive
         );
-
-    function rewardClaimed(
-        address _rewardContract,
-        address _address,
-        uint256 _amount
-    ) external;
-
-    function setRewardMultiplier(address rewardContract, uint256 multiplier) external;
-
-    function defaultRewardMultiplier() external view returns (uint256);
 }

@@ -2,11 +2,21 @@
 pragma solidity >=0.6.12;
 pragma experimental ABIEncoderV2;
 
-import "@openzeppelin/contracts-0.6/token/ERC721/IERC721.sol";
-import "./INonfungiblePositionManagerStruct.sol";
+import { IERC721 } from "@openzeppelin/contracts-0.6/token/ERC721/IERC721.sol";
+import { INonfungiblePositionManagerStruct } from "./INonfungiblePositionManagerStruct.sol";
 
 interface INonfungiblePositionManager is INonfungiblePositionManagerStruct, IERC721 {
     event IncreaseLiquidity(
+        uint256 indexed tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1,
+        int24 tickLower,
+        int24 tickUpper,
+        address pool
+    );
+
+    event DecreaseLiquidity(
         uint256 indexed tokenId,
         uint128 liquidity,
         uint256 amount0,

@@ -4,7 +4,7 @@ pragma solidity 0.8.11;
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import { AuraMath } from "../utils/AuraMath.sol";
-import { ICrvDepositorWrapper } from "../interfaces/ICrvDepositorWrapper.sol";
+import { ICrvDepositor } from "../interfaces/ICrvDepositor.sol";
 import { IAuraLocker } from "../interfaces/IAuraLocker.sol";
 import { IRewardStaking } from "../interfaces/IRewardStaking.sol";
 import { IRewardPool4626 } from "../interfaces/IRewardPool4626.sol";
@@ -192,7 +192,7 @@ contract AuraClaimZapV3 {
      * @notice returns a bool if relocking of rewards should occur
      * @param options                Claim options
      */
-    function _callRelockRewards(Options calldata options) internal view returns (bool) {
+    function _callRelockRewards(Options calldata options) internal pure returns (bool) {
         return (options.lockCvxCrv || options.lockCrvDeposit || options.useCompounder || options.lockCvx);
     }
 
@@ -207,54 +207,53 @@ contract AuraClaimZapV3 {
      * @param options                see claimRewards
      */
     // prettier-ignore
-    function _relockRewards( // solhint-disable-line 
+    function _relockRewards( // solhint-disable-line
         uint256 removeCrvBalance,
         uint256 removeCvxBalance,
-        uint256 removeCvxCrvBalance,          
-        ClaimRewardsAmounts calldata amounts, 
+        uint256 removeCvxCrvBalance,
+        ClaimRewardsAmounts calldata amounts,
         Options calldata options
     ) internal {
-        
+
         //lock upto given amount of crv as cvxCrv
         if (amounts.depositCrvMaxAmount > 0) {
             (uint256 crvBalance, bool continued) = _checkBalanceAndPullToken(
                 crv,
-                removeCrvBalance, 
+                removeCrvBalance,
                 amounts.depositCrvMaxAmount
             );
 
-            if (continued) {ICrvDepositorWrapper(crvDepositor).deposit(
+            if (continued) {ICrvDepositor(crvDepositor).depositFor(
+                    msg.sender,
                     crvBalance,
-                    amounts.minAmountOut,
                     options.lockCrvDeposit,
                     address(0)
                 );}
         }
 
-        
         //Pull cvxCrv to contract if user wants to stake
         if (options.lockCvxCrv) {
             _checkBalanceAndPullToken(cvxCrv, removeCvxCrvBalance, amounts.depositCvxCrvMaxAmount);
         }
-        
+
 
         //Locks CvxCrv balance held on contract
         //deposit in the autocompounder if flag is set, or stake in rewards contract if not set
-        uint cvxCrvBalanceToLock = IERC20(cvxCrv).balanceOf(address(this));
+        uint256 cvxCrvBalanceToLock = IERC20(cvxCrv).balanceOf(address(this));
         if(cvxCrvBalanceToLock > 0){
             if(options.useCompounder) {
                 IRewardPool4626(compounder).deposit(cvxCrvBalanceToLock, msg.sender);
             }
             else{
                 IRewardStaking(cvxCrvRewards).stakeFor(msg.sender, cvxCrvBalanceToLock);
-            }   
+            }
         }
 
         //stake up to given amount of cvx
         if (options.lockCvx) {
             (uint256 cvxBalance, bool continued) = _checkBalanceAndPullToken(
-                cvx, 
-                removeCvxBalance, 
+                cvx,
+                removeCvxBalance,
                 amounts.depositCvxMaxAmount
             );
             if(continued){IAuraLocker(locker).lock(msg.sender, cvxBalance);}

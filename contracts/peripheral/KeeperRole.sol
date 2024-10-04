@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
-import "@openzeppelin/contracts-0.8/access/Ownable.sol";
+import { Ownable } from "@openzeppelin/contracts-0.8/access/Ownable.sol";
 
 /**
  *  @title KeeperRole

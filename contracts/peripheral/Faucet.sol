@@ -33,8 +33,8 @@ contract Faucet {
         for (uint256 i = 0; i < len; i++) {
             IERC20 token = IERC20(_tokens[i]);
             if (token.balanceOf(address(this)) > AMOUNT) {
-                token.transfer(msg.sender, AMOUNT);
                 isClaimed[msg.sender][address(token)] = true;
+                token.transfer(msg.sender, AMOUNT);
                 emit Claimed(msg.sender, address(token), AMOUNT);
             }
         }

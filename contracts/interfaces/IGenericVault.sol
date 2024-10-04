@@ -14,6 +14,12 @@ interface IGenericVault {
 
     function deposit(uint256 _amount, address _receiver) external returns (uint256 _shares);
 
+    function redeem(
+        uint256 _shares,
+        address _receiver,
+        address _owner
+    ) external returns (uint256 withdrawn);
+
     function harvest() external;
 
     function balanceOfUnderlying(address user) external view returns (uint256 amount);

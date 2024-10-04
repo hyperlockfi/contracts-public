@@ -6,7 +6,6 @@ import { IAuraLocker } from "../interfaces/IAuraLocker.sol";
 import { AuraMath } from "../utils/AuraMath.sol";
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts-0.8/security/ReentrancyGuard.sol";
 
 /**
  * @title   AuraMerkleDrop
@@ -28,6 +27,7 @@ contract AuraMerkleDrop {
 
     address public immutable penaltyForwarder;
     uint256 public pendingPenalty = 0;
+    uint256 public constant PENALTY_NUMERATOR = 5; // 50% penalty
 
     uint256 public immutable deployTime;
     uint256 public startTime;
@@ -89,7 +89,6 @@ contract AuraMerkleDrop {
 
     function setRoot(bytes32 _merkleRoot) external {
         require(msg.sender == dao, "!auth");
-        require(merkleRoot == bytes32(0), "already set");
         merkleRoot = _merkleRoot;
         emit RootSet(_merkleRoot);
     }
@@ -152,7 +151,7 @@ contract AuraMerkleDrop {
             // If there is an address for auraLocker, and not locking, apply 20% penalty
             uint256 penalty = address(penaltyForwarder) == address(0) || address(auraLocker) == address(0)
                 ? 0
-                : (_amount * 3) / 10;
+                : (_amount * PENALTY_NUMERATOR) / 10;
             pendingPenalty += penalty;
             aura.safeTransfer(msg.sender, _amount - penalty);
         }

@@ -59,13 +59,9 @@ contract VoterProxy is NfpOps, ReentrancyGuard {
         protectedTokens[_crv] = true;
     }
 
-    function init(
-        address _nfpDeposits,
-        address _nfpBooster,
-        address _nfpManager
-    ) external {
+    function init(address _nfpBooster, address _nfpManager) external {
         require(msg.sender == owner, "!auth");
-        _initNfpOps(_nfpDeposits, _nfpBooster, _nfpManager);
+        _initNfpOps(_nfpBooster, _nfpManager);
     }
 
     function getName() external pure returns (string memory) {
@@ -308,13 +304,13 @@ contract VoterProxy is NfpOps, ReentrancyGuard {
      * @notice  Claim fees from staking lp tokens
      * @dev     Only callable by the operator Booster
      * @param _distroContract   Fee distribution contract
-     * @param _token            LP token to claim fees for
      */
-    function claimFees(address _distroContract, address _token) external nonReentrant returns (uint256) {
+    function claimFees(address _distroContract) external nonReentrant returns (uint256) {
         require(msg.sender == operator, "!auth");
-        IFeeDistributor(_distroContract).claimToken(address(this), _token);
-        uint256 _balance = IERC20(_token).balanceOf(address(this));
-        IERC20(_token).safeTransfer(operator, _balance);
+        IFeeDistributor(_distroContract).claim(address(this));
+        address token = IFeeDistributor(_distroContract).token();
+        uint256 _balance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransfer(operator, _balance);
         return _balance;
     }
 

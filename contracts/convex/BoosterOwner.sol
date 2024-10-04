@@ -4,7 +4,6 @@ pragma solidity 0.6.12;
 // prettier-ignore
 interface IOwner {
     function setFactories(address _rfactory, address _sfactory, address _tfactory) external;
-    function setArbitrator(address _arb) external;
     function setFeeInfo(address _feeToken, address _feeDistro) external;
     function updateFeeInfo(address _feeToken, bool _active) external;
     function shutdownSystem() external;
@@ -14,13 +13,12 @@ interface IOwner {
     function setVoteDelegate(address _voteDelegate) external;
     function setFeeManager(address _feeM) external;
     function setOwner(address _owner) external;
-    function setDistribution(address _distributor, address _rewardDeposit, address _treasury) external;
     function setExtraReward(address _token, uint256 _option) external;
     function setExtraReward(address _token) external;
     function setRewardHook(address _hook) external;
-    function setImplementation(address _v1, address _v2, address _v3) external;
+    function setImplementation(address _implementation) external;
     function setBoosterFeeDistro(address _distro) external;
-    function setBoosterFeeHandler(address _handler) external;
+    function setNfpBooster(address _nfpBooster) external;
 }
 
 // prettier-ignore
@@ -28,7 +26,6 @@ interface IBoosterOwner {
     function transferOwnership(address _owner) external;
     function acceptOwnership() external;
     function setFactories(address _rfactory, address _sfactory, address _tfactory) external;
-    function setArbitrator(address _arb) external;
     function setFeeInfo(address _feeToken, address _feeDistro) external;
     function updateFeeInfo(address _feeToken, bool _active) external;
     function setFeeManager(address _feeM) external;
@@ -37,12 +34,10 @@ interface IBoosterOwner {
     function queueForceShutdown() external;
     function forceShutdownSystem() external;
     function execute( address _to, uint256 _value, bytes calldata _data) external returns (bool, bytes memory);
-    function setRescueTokenDistribution(address _distributor, address _rewardDeposit, address _treasury) external;
-    function setRescueTokenReward(address _token, uint256 _option) external;
     function setStashRewardHook(address _stash, address _hook) external;
-    function setStashFactoryImplementation(address _v1, address _v2, address _v3) external;
+    function setStashFactoryImplementation(address _implementation) external;
     function setBoosterFeeDistro(address _distro) external;
-    function setBoosterFeeHandler(address _handler) external;
+    function setNfpBooster(address _nfpBooster) external;
 }
 
 /**
@@ -133,10 +128,6 @@ contract BoosterOwner is IBoosterOwner {
         IOwner(booster).setFactories(_rfactory, _sfactory, _tfactory);
     }
 
-    function setArbitrator(address _arb) external override onlyOwner {
-        IOwner(booster).setArbitrator(_arb);
-    }
-
     function setFeeInfo(address _feeToken, address _feeDistro) external override onlyOwner {
         IOwner(booster).setFeeInfo(_feeToken, _feeDistro);
     }
@@ -206,39 +197,21 @@ contract BoosterOwner is IBoosterOwner {
 
     // --- Helper functions for other systems, could also just use execute() ---
 
-    //TokenRescue setDistribution
-    function setRescueTokenDistribution(
-        address _distributor,
-        address _rewardDeposit,
-        address _treasury
-    ) external override onlyOwner {
-        IOwner(rescueStash).setDistribution(_distributor, _rewardDeposit, _treasury);
-    }
-
-    //TokenRescue setExtraReward
-    function setRescueTokenReward(address _token, uint256 _option) external override onlyOwner {
-        IOwner(rescueStash).setExtraReward(_token, _option);
-    }
-
     //stash v3 - set reward hook
     function setStashRewardHook(address _stash, address _hook) external override onlyOwner {
         IOwner(_stash).setRewardHook(_hook);
     }
 
     //stash factory - set implementation
-    function setStashFactoryImplementation(
-        address _v1,
-        address _v2,
-        address _v3
-    ) external override onlyOwner {
-        IOwner(stashFactory).setImplementation(_v1, _v2, _v3);
+    function setStashFactoryImplementation(address _implementation) external override onlyOwner {
+        IOwner(stashFactory).setImplementation(_implementation);
     }
 
     function setBoosterFeeDistro(address _distro) external override onlyOwner {
         IOwner(booster).setBoosterFeeDistro(_distro);
     }
 
-    function setBoosterFeeHandler(address _handler) external override onlyOwner {
-        IOwner(booster).setBoosterFeeHandler(_handler);
+    function setNfpBooster(address _booster) external override onlyOwner {
+        IOwner(booster).setNfpBooster(_booster);
     }
 }

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.11;
-import "hardhat/console.sol";
 
 import "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import "../utils/AuraMath.sol";
@@ -714,4 +713,6 @@ contract FeeDistributor {
         // Overflows are impossible here for all realistic inputs.
         return _roundDownTimestamp(timestamp + 1 weeks - 1);
     }
+
+    function checkpoint_token() external {}
 }

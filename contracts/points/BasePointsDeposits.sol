@@ -38,7 +38,9 @@ abstract contract BasePointsDeposits is Ownable {
     /* -------------------------------------------------------------------
        Constructor 
     ------------------------------------------------------------------- */
-
+    /**
+     * @param _points  The points contract.
+     */
     constructor(address _points) public {
         points = IPoints(_points);
     }
@@ -46,12 +48,24 @@ abstract contract BasePointsDeposits is Ownable {
     /* -------------------------------------------------------------------
        Admin 
     ------------------------------------------------------------------- */
-
+    /**
+     * @notice Set if forceExpireLocks is active or not.
+     * This force all locks to expire and enable withdrawals
+     * @dev Only callable by the contract owner
+     * @param _force If forceExpireLocks is active
+     */
     function setForceExpireLocks(bool _force) external onlyOwner {
         forceExpireLocks = _force;
         emit SetForceExpireLocks(_force);
     }
 
+    /**
+     * @notice Transfer ERC20
+     * @dev Only callable by the contract owner
+     * @param _token The token address
+     * @param _to Address to transfer tokens to
+     * @param _amount Amount of tokens to send
+     */
     function transferERC20(
         address _token,
         address _to,

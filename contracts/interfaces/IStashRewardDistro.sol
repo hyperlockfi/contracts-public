@@ -8,4 +8,11 @@ interface IStashRewardDistro {
         uint256 amount,
         uint256 period
     ) external;
+
+    function createMerklCampaign(
+        address pool,
+        address token,
+        uint256 amount,
+        uint256 periods
+    ) external;
 }

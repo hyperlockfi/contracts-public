@@ -9,13 +9,20 @@ import { SafeMath } from "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import { INonfungiblePositionManager } from "../interfaces/INonfungiblePositionManager.sol";
 import { INonfungiblePositionManagerStruct } from "../interfaces/INonfungiblePositionManagerStruct.sol";
 import { PoolAddress } from "../thruster/PoolAddress.sol";
-import { IPoints } from "../interfaces/IPoints.sol";
 import { BasePointsDeposits } from "./BasePointsDeposits.sol";
+import { BlastYieldManager } from "../blast/BlastYieldManager.sol";
+import { BlastPointsManager } from "../blast/BlastPointsManager.sol";
 
 /**
  * @author  Hyperlock Finance
  */
-contract ERC721PointsDeposits is BasePointsDeposits, INonfungiblePositionManagerStruct, ReentrancyGuard {
+contract ERC721PointsDeposits is
+    BasePointsDeposits,
+    INonfungiblePositionManagerStruct,
+    ReentrancyGuard,
+    BlastYieldManager,
+    BlastPointsManager
+{
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -40,6 +47,10 @@ contract ERC721PointsDeposits is BasePointsDeposits, INonfungiblePositionManager
        Constructor 
     ------------------------------------------------------------------- */
 
+    /**
+     * @param _nfpManager  The Nonfungible Position Manager.
+     * @param _points  The points contract.
+     */
     constructor(address _nfpManager, address _points) public BasePointsDeposits(_points) {
         nfpManager = INonfungiblePositionManager(_nfpManager);
     }
@@ -58,7 +69,7 @@ contract ERC721PointsDeposits is BasePointsDeposits, INonfungiblePositionManager
     ------------------------------------------------------------------- */
 
     function onERC721Received(
-        address,
+        address, /* _operator */
         address _from,
         uint256 _tokenId,
         bytes calldata
@@ -184,7 +195,7 @@ contract ERC721PointsDeposits is BasePointsDeposits, INonfungiblePositionManager
        Utils 
     -------------------------------------------------------------- */
 
-    function _poolFromTokenId(uint256 _tokenId) internal view returns (address) {
+    function _poolFromTokenId(uint256 _tokenId) internal view virtual returns (address) {
         (, , address token0, address token1, uint24 fee, , , , , , , ) = nfpManager.positions(_tokenId);
         return PoolAddress.computeAddress(nfpManager.factory(), PoolAddress.PoolKey(token0, token1, fee));
     }

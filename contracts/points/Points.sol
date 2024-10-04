@@ -3,9 +3,10 @@ pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import { SafeMath } from "@openzeppelin/contracts-0.6/math/SafeMath.sol";
-import { Ownable } from "@openzeppelin/contracts-0.6/access/Ownable.sol";
 import { MerkleProof } from "@openzeppelin/contracts-0.6/cryptography/MerkleProof.sol";
 import { Multicall } from "../nfp/Multicall.sol";
+import { BlastYieldManager } from "../blast/BlastYieldManager.sol";
+import { BlastPointsManager } from "../blast/BlastPointsManager.sol";
 
 /**
  * @author  Hyperlock Finance
@@ -14,7 +15,7 @@ import { Multicall } from "../nfp/Multicall.sol";
  *          - Allocate points to pools
  *          - Manage roots
  */
-contract Points is Ownable, Multicall {
+contract Points is Multicall, BlastYieldManager, BlastPointsManager {
     using SafeMath for uint256;
 
     /* -------------------------------------------------------------------
@@ -112,6 +113,7 @@ contract Points is Ownable, Multicall {
     /**
      * @notice  Claim points
      * @dev     - Can only claim once per epoch
+     * @dev     - Can only claim points for the current epoch
      *
      * @param _proof The merkle root proof
      * @param _amount The amount of points to claim

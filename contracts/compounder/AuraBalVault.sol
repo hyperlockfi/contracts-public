@@ -2,10 +2,7 @@
 pragma solidity 0.8.11;
 
 import { GenericUnionVault } from "./GenericVault.sol";
-
-interface IAuraBalStrategy {
-    function harvest() external;
-}
+import { IStrategy } from "../interfaces/IStrategy.sol";
 
 /**
  * @title   AuraBalVault
@@ -35,12 +32,18 @@ contract AuraBalVault is GenericUnionVault {
     /// @dev Harvest logic in the strategy contract
     /// @dev Harvest can be called even if permissioned when last staker is
     ///      withdrawing from the vault.
-    function harvest() public override {
+    function harvest(uint256 _minAmountOut) public {
         require(
             !isHarvestPermissioned || authorizedHarvesters[msg.sender] || totalSupply() == 0,
             "permissioned harvest"
         );
-        IAuraBalStrategy(strategy).harvest();
-        emit Harvest(msg.sender);
+        uint256 _harvested = IStrategy(strategy).harvest(_minAmountOut);
+        emit Harvest(msg.sender, _harvested);
+    }
+
+    /// @notice Claim rewards and swaps them to auraBAL for restaking
+    /// @dev No slippage protection, swapping for auraBAL
+    function harvest() public override {
+        harvest(0);
     }
 }

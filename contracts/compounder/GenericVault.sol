@@ -33,7 +33,7 @@ contract GenericUnionVault is ERC20, IERC4626, Ownable, ReentrancyGuard {
     mapping(address => bool) public isExtraReward;
 
     event WithdrawalPenaltyUpdated(uint256 _penalty);
-    event Harvest(address indexed _caller);
+    event Harvest(address indexed _caller, uint256 _value);
     event StrategySet(address indexed _strategy);
     event ExtraRewardAdded(address indexed _reward, address extraReward);
     event ExtraRewardCleared(address indexed _reward);
@@ -51,7 +51,7 @@ contract GenericUnionVault is ERC20, IERC4626, Ownable, ReentrancyGuard {
     /// @notice Updates the withdrawal penalty
     /// @param _penalty - the amount of the new penalty (in BIPS)
     function setWithdrawalPenalty(uint256 _penalty) external onlyOwner {
-        require(_penalty <= MAX_WITHDRAWAL_PENALTY);
+        require(_penalty <= MAX_WITHDRAWAL_PENALTY, "!penalty");
         withdrawalPenalty = _penalty;
         emit WithdrawalPenaltyUpdated(_penalty);
     }
@@ -209,8 +209,8 @@ contract GenericUnionVault is ERC20, IERC4626, Ownable, ReentrancyGuard {
     /// @dev Can be called by anyone against an incentive in FXS
     /// @dev Harvest logic in the strategy contract
     function harvest() public virtual {
-        IStrategy(strategy).harvest();
-        emit Harvest(msg.sender);
+        uint256 _harvested = IStrategy(strategy).harvest();
+        emit Harvest(msg.sender, _harvested);
     }
 
     modifier notToZeroAddress(address _to) {

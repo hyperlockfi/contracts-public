@@ -2,7 +2,6 @@
 pragma solidity 0.6.12;
 
 import "./Interfaces.sol";
-import "../interfaces/IBoosterFeeHandler.sol";
 import "@openzeppelin/contracts-0.6/math/SafeMath.sol";
 import "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-0.6/utils/Address.sol";
@@ -27,7 +26,6 @@ contract Booster is ReentrancyGuard {
     address public immutable voteParameter;
 
     address public boosterFeeDistro;
-    address public boosterFeeHandler;
     address public nfpBooster;
 
     uint256 public lockIncentive = 825; //incentive to crv stakers
@@ -48,8 +46,6 @@ contract Booster is ReentrancyGuard {
     address public treasury;
     address public stakerRewards; //cvx rewards
     address public lockRewards; //cvxCrv rewards(crv)
-    address public bridgeDelegate;
-    mapping(uint256 => uint256) public l2FeesHistory;
     uint256 public constant epochLength = 1 weeks;
 
     mapping(address => FeeDistro) public feeTokens;
@@ -74,13 +70,6 @@ contract Booster is ReentrancyGuard {
     PoolInfo[] public poolInfo;
     mapping(address => bool) public gaugeMap;
 
-    // Reward multiplier for increasing or decreasing AURA rewards per PID
-    uint256 public constant REWARD_MULTIPLIER_DENOMINATOR = 10000;
-    uint256 public defaultRewardMultiplier;
-
-    // rewardContract => rewardMultiplier (10000 = 100%)
-    mapping(address => uint256) public getRewardMultipliers;
-
     event Deposited(address indexed user, uint256 indexed poolid, uint256 amount);
     event Withdrawn(address indexed user, uint256 indexed poolid, uint256 amount);
 
@@ -91,11 +80,9 @@ contract Booster is ReentrancyGuard {
     event FeeManagerUpdated(address newFeeManager);
     event PoolManagerUpdated(address newPoolManager);
     event FactoriesUpdated(address rewardFactory, address stashFactory, address tokenFactory);
-    event ArbitratorUpdated(address newArbitrator);
     event VoteDelegateUpdated(address newVoteDelegate);
     event RewardContractsUpdated(address lockRewards, address stakerRewards);
     event BoosterFeeDistroUpdated(address boosterFeeDistro);
-    event BoosterFeeHandlerUpdated(address boosterFeeHandler);
     event NfpBoosterUpdated(address booster);
     event FeesUpdated(uint256 lockIncentive, uint256 stakerIncentive, uint256 earmarkIncentive);
     event TreasuryUpdated(address newTreasury);
@@ -133,8 +120,6 @@ contract Booster is ReentrancyGuard {
         feeManager = msg.sender;
         poolManager = msg.sender;
         treasury = address(0);
-
-        defaultRewardMultiplier = REWARD_MULTIPLIER_DENOMINATOR;
 
         emit OwnerUpdated(msg.sender);
         emit VoteDelegateUpdated(msg.sender);
@@ -221,7 +206,6 @@ contract Booster is ReentrancyGuard {
         if (lockRewards == address(0)) {
             lockRewards = _rewards;
             stakerRewards = _stakerRewards;
-            getRewardMultipliers[lockRewards] = defaultRewardMultiplier;
             emit RewardContractsUpdated(_rewards, _stakerRewards);
         }
     }
@@ -236,20 +220,10 @@ contract Booster is ReentrancyGuard {
     }
 
     /**
-     * @notice Set the booster fee handler address
-     */
-    function setBoosterFeeHandler(address _handler) external {
-        require(msg.sender == owner, "!auth");
-        boosterFeeHandler = _handler;
-        emit BoosterFeeHandlerUpdated(_handler);
-    }
-
-    /**
-     * @notice Set the booster fee handler address
+     * @notice Set nfp booster address
      */
     function setNfpBooster(address _booster) external {
         require(msg.sender == owner, "!auth");
-        require(nfpBooster == address(0), "already set");
         nfpBooster = _booster;
         emit NfpBoosterUpdated(_booster);
     }
@@ -264,7 +238,7 @@ contract Booster is ReentrancyGuard {
         require(lockRewards != address(0) && rewardFactory != address(0), "!initialised");
 
         require(_feeToken != address(0) && _feeDistro != address(0), "!addresses");
-        require(IFeeDistributor(_feeDistro).getTokenTimeCursor(_feeToken) > 0, "!distro");
+        require(IFeeDistributor(_feeDistro).token() == _feeToken, "!distro");
 
         if (feeTokens[_feeToken].distro == address(0)) {
             require(!gaugeMap[_feeToken], "!token");
@@ -328,28 +302,6 @@ contract Booster is ReentrancyGuard {
         emit TreasuryUpdated(_treasury);
     }
 
-    /**
-     * @dev Set bridge delegate
-     * @param _bridgeDelegate The bridge delegate address
-     */
-    function setBridgeDelegate(address _bridgeDelegate) external {
-        require(msg.sender == feeManager, "!auth");
-        getRewardMultipliers[_bridgeDelegate] = defaultRewardMultiplier;
-        bridgeDelegate = _bridgeDelegate;
-    }
-
-    function setRewardMultiplier(address rewardContract, uint256 multiplier) external {
-        require(msg.sender == feeManager || msg.sender == nfpBooster, "!auth");
-        require(multiplier <= REWARD_MULTIPLIER_DENOMINATOR * 2, "too high");
-        getRewardMultipliers[rewardContract] = multiplier;
-    }
-
-    function setDefaultRewardMultiplier(uint256 _defaultRewardMultiplier) external {
-        require(msg.sender == feeManager, "!auth");
-        require(_defaultRewardMultiplier <= REWARD_MULTIPLIER_DENOMINATOR * 2, "too high");
-        defaultRewardMultiplier = _defaultRewardMultiplier;
-    }
-
     /// END SETTER SECTION ///
 
     function poolLength() external view returns (uint256) {
@@ -395,9 +347,6 @@ contract Booster is ReentrancyGuard {
             IStaker(staker).setStashAccess(stash, true);
             IRewardFactory(rewardFactory).setAccess(stash, true);
         }
-
-        // Init the pool with the default reward multiplier
-        getRewardMultipliers[newRewardPool] = defaultRewardMultiplier;
 
         emit PoolAdded(_lptoken, _gauge, token, newRewardPool, stash, pid);
         return true;
@@ -670,28 +619,21 @@ contract Booster is ReentrancyGuard {
         }
 
         if (crvBal > 0) {
-            (, , , uint256 _crvRewardIncentive, ) = _calculateIncentives(crvBal);
-
-            IERC20(crv).safeTransfer(boosterFeeHandler, crvBal);
-            IBoosterFeeHandler(boosterFeeHandler).sell(address(this), crvBal);
-            uint256 cvxCrvBal = IERC20(cvxCrv).balanceOf(address(this));
             (
                 uint256 _lockIncentive,
                 uint256 _stakerIncentive,
                 uint256 _callIncentive,
                 uint256 _rewardIncentive,
                 uint256 _totalIncentive
-            ) = _calculateIncentives(cvxCrvBal);
+            ) = _calculateIncentives(crvBal);
 
             //send crv to lp provider reward contract
             address rewardContract = pool.crvRewards;
-            IERC20(cvxCrv).safeTransfer(rewardContract, _rewardIncentive);
+            IERC20(crv).safeTransfer(rewardContract, _rewardIncentive);
             IRewards(rewardContract).queueNewRewards(_rewardIncentive);
-            //mint CVX and send it to the reward contract
-            _mintCvxRewards(rewardContract, stash, _crvRewardIncentive);
 
             //send stakers's share of crv to reward contract
-            IERC20(cvxCrv).safeTransfer(boosterFeeDistro, _totalIncentive);
+            IERC20(crv).safeTransfer(boosterFeeDistro, _totalIncentive);
             IBoosterFeeDistro(boosterFeeDistro).queueNewRewards(_lockIncentive, _stakerIncentive, _callIncentive);
         }
 
@@ -768,77 +710,13 @@ contract Booster is ReentrancyGuard {
         uint256 tokenBalanceVBefore = IERC20(_feeToken).balanceOf(staker);
         uint256 tokenBalanceBBefore = IERC20(_feeToken).balanceOf(address(this));
         uint256 tokenBalanceBefore = tokenBalanceBBefore.add(tokenBalanceVBefore);
-        IStaker(staker).claimFees(feeDistro.distro, _feeToken);
+        IStaker(staker).claimFees(feeDistro.distro);
         uint256 tokenBalanceAfter = IERC20(_feeToken).balanceOf(address(this));
         uint256 feesClaimed = tokenBalanceAfter.sub(tokenBalanceBefore);
-
-        if (_feeToken == crv) {
-            // If we are processing fees for CRV we also need to mint the
-            // CVX that will be earned to the lockRewards (vault strategy)
-            _mintCvxRewards(lockRewards, lockRewards, feesClaimed);
-        }
 
         //send fee rewards to reward contract
         IERC20(_feeToken).safeTransfer(feeDistro.rewards, feesClaimed);
 
         return true;
-    }
-
-    /**
-     * @notice Callback from reward contract when crv is received.
-     * @dev    Goes off and mints a relative amount of `CVX` based on the distribution schedule.
-     */
-    function rewardClaimed(
-        address _rewardContract,
-        address _address,
-        uint256 _amount
-    ) external returns (bool) {
-        require(msg.sender == nfpBooster, "!auth");
-
-        _mintCvxRewards(_rewardContract, _address, _amount);
-    }
-
-    function _mintCvxRewards(
-        address _rewardContract,
-        address _address,
-        uint256 _amount
-    ) internal {
-        uint256 mintAmount = _amount.mul(getRewardMultipliers[_rewardContract]).div(REWARD_MULTIPLIER_DENOMINATOR);
-
-        if (mintAmount > 0) {
-            //mint reward tokens
-            ITokenMinter(minter).mint(_address, mintAmount);
-        }
-    }
-
-    /**
-     * @dev Distribute fees from L2 to L1 reward contracts
-     * @param _amount Amount of fees to distribute
-     */
-    function distributeL2Fees(uint256 _amount) external nonReentrant {
-        require(msg.sender == bridgeDelegate, "!auth");
-
-        // calculate the rewards that were paid based on the incentives that
-        // are being distributed
-        uint256 totalIncentives = lockIncentive.add(stakerIncentive);
-        uint256 totalFarmed = _amount.mul(FEE_DENOMINATOR).div(totalIncentives);
-        uint256 eligibleForMint = totalFarmed.sub(_amount);
-
-        // Ensure that the total amount of rewards claimed per epoch is less than 70k
-        uint256 epoch = block.timestamp.div(epochLength);
-        l2FeesHistory[epoch] = l2FeesHistory[epoch].add(totalFarmed);
-        require(l2FeesHistory[epoch] <= 100000e18, "Too many L2 Fees");
-
-        // Send CRV to the feeHandler to conver to cvxCRV
-        IERC20(crv).safeTransferFrom(msg.sender, boosterFeeHandler, _amount);
-        uint256 cvxCrvBal = IBoosterFeeHandler(boosterFeeHandler).sell(boosterFeeDistro, _amount);
-
-        // Calculate fees for individual reward contracts
-        uint256 _lockIncentive = cvxCrvBal.mul(lockIncentive).div(totalIncentives);
-        uint256 _stakerIncentive = cvxCrvBal.sub(_lockIncentive);
-        IBoosterFeeDistro(boosterFeeDistro).queueNewRewards(_lockIncentive, _stakerIncentive, 0);
-
-        // Mint CVX to bridge delegate
-        _mintCvxRewards(bridgeDelegate, bridgeDelegate, eligibleForMint);
     }
 }

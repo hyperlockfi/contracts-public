@@ -5,13 +5,14 @@ import { IERC20 } from "@openzeppelin/contracts-0.6/token/ERC20/IERC20.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts-0.6/utils/ReentrancyGuard.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.6/token/ERC20/SafeERC20.sol";
 import { SafeMath } from "@openzeppelin/contracts-0.6/math/SafeMath.sol";
-import { IPoints } from "../interfaces/IPoints.sol";
 import { BasePointsDeposits } from "./BasePointsDeposits.sol";
+import { BlastYieldManager } from "../blast/BlastYieldManager.sol";
+import { BlastPointsManager } from "../blast/BlastPointsManager.sol";
 
 /**
  * @author  Hyperlock Finance
  */
-contract ERC20PointsDeposits is BasePointsDeposits, ReentrancyGuard {
+contract ERC20PointsDeposits is BasePointsDeposits, ReentrancyGuard, BlastYieldManager, BlastPointsManager {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -33,13 +34,20 @@ contract ERC20PointsDeposits is BasePointsDeposits, ReentrancyGuard {
     /* -------------------------------------------------------------------
        Constructor 
     ------------------------------------------------------------------- */
-
+    /**
+     * @param _points  The points contract.
+     */
     constructor(address _points) public BasePointsDeposits(_points) {}
 
     /* -------------------------------------------------------------------
        ERC20 LP Tokens 
     ------------------------------------------------------------------- */
-
+    /**
+     * @notice Stake LP Token for a given amount of time.
+     * @param _lpToken The LP token to to stake.
+     * @param _amount  Amount of tokens to stake.
+     * @param _lock Amount of time to lock, cannot be greater than 8 weeks.
+     */
     function stake(
         address _lpToken,
         uint256 _amount,

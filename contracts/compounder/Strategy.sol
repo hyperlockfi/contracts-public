@@ -7,13 +7,11 @@ import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { IGenericVault } from "../interfaces/IGenericVault.sol";
 import { IRewardHandler } from "../interfaces/balancer/IRewardHandler.sol";
 import { IVirtualRewards } from "../interfaces/IVirtualRewards.sol";
-import { ICrvDepositor } from "../interfaces/ICrvDepositor.sol";
 
 /**
  * @title   AuraBalStrategy
  * @author  llama.airforce -> AuraFinance
  * @notice  Changes:
- *          - remove option to lock auraBAL instead of swapping it
  *          - remove paltform fee
  */
 contract AuraBalStrategy is Ownable {
@@ -22,33 +20,29 @@ contract AuraBalStrategy is Ownable {
     address public immutable BAL_TOKEN;
     address public immutable AURABAL_TOKEN;
 
-    ICrvDepositor public immutable crvDepositor;
-
     address public immutable vault;
     address[] public rewardTokens;
     mapping(address => address) public rewardHandlers;
 
+    /// @notice restrict function to the vault
     modifier onlyVault() {
         require(vault == msg.sender, "!vault");
         _;
     }
 
+    /**
+     * @param _vault  The vault address
+     * @param _balToken  The BAL token address
+     * @param _auraBalToken The AuraBAL token address
+     */
     constructor(
         address _vault,
         address _balToken,
-        address _auraBalToken,
-        address _crvDepositor
+        address _auraBalToken
     ) {
         vault = _vault;
-
         BAL_TOKEN = _balToken;
         AURABAL_TOKEN = _auraBalToken;
-        crvDepositor = ICrvDepositor(_crvDepositor);
-    }
-
-    function setApprovals() external {
-        IERC20(BAL_TOKEN).safeApprove(address(crvDepositor), 0);
-        IERC20(BAL_TOKEN).safeApprove(address(crvDepositor), type(uint256).max);
     }
 
     /// @notice update the token to handler mapping
@@ -104,9 +98,11 @@ contract AuraBalStrategy is Ownable {
         IERC20(AURABAL_TOKEN).safeTransfer(vault, _amount);
     }
 
-    /// @notice Claim rewards and swaps them to FXS for restaking
+    /// @notice Claim rewards and swaps them to underlying for restaking
     /// @dev Can be called by the vault only
-    function harvest() public onlyVault {
+    /// @param _minAmountOut -  min amount of underlying tokens to receive w/o revert
+    function harvest(uint256 _minAmountOut) public onlyVault returns (uint256 harvested) {
+        uint256 auraBalBefore = IERC20(AURABAL_TOKEN).balanceOf(address(this));
         // process extra rewards
         uint256 extraRewardCount = IGenericVault(vault).extraRewardsLength();
         for (uint256 i; i < extraRewardCount; ++i) {
@@ -133,10 +129,7 @@ contract AuraBalStrategy is Ownable {
             }
         }
 
-        uint256 _balBalance = IERC20(BAL_TOKEN).balanceOf(address(this));
-
-        if (_balBalance > 0) {
-            crvDepositor.depositFor(address(this), _balBalance, false, address(0));
-        }
+        harvested = IERC20(AURABAL_TOKEN).balanceOf(address(this)) - auraBalBefore;
+        require(harvested >= _minAmountOut, "!minAmountOut");
     }
 }

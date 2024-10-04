@@ -4,14 +4,10 @@ pragma solidity 0.8.11;
 import { IERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts-0.8/token/ERC20/utils/SafeERC20.sol";
 import { IStashRewardDistro } from "../interfaces/IStashRewardDistro.sol";
-import { IVirtualRewards } from "../interfaces/IVirtualRewards.sol";
-import { IExtraRewardStash } from "../interfaces/IExtraRewardStash.sol";
 import { AuraMath } from "../utils/AuraMath.sol";
 import { IBooster } from "../interfaces/IBooster.sol";
-
-interface IBoosterOrBoosterLite is IBooster {
-    function earmarkRewards(uint256, address) external;
-}
+import { DistributionParameters } from "../interfaces/merkl/DistributionParameters.sol";
+import { IDistributionCreator } from "../interfaces/merkl/IDistributionCreator.sol";
 
 /**
  * @title   StashRewardDistro
@@ -22,37 +18,45 @@ contract StashRewardDistro is IStashRewardDistro {
     using SafeERC20 for IERC20;
 
     /* -------------------------------------------------------------------
-       Storage 
+       Storage
     ------------------------------------------------------------------- */
 
     // @dev Epoch duration
     uint256 public constant EPOCH_DURATION = 1 weeks;
 
     // @dev The booster address
-    IBoosterOrBoosterLite public immutable booster;
+    IBooster public immutable booster;
+
+    // @dev The merkl distribution contract
+    address public immutable merklDistributionCreator;
 
     // @dev Epoch => Pool ID => Token => Amount
     mapping(uint256 => mapping(uint256 => mapping(address => uint256))) public getFunds;
 
     /* -------------------------------------------------------------------
-       Events 
+       Events
     ------------------------------------------------------------------- */
 
     event Funded(uint256 epoch, uint256 pid, address token, uint256 amount);
+    event Queued(uint256 epoch, uint256 pid, address token, uint256 amount);
+    event MerklCampaign(uint256 epoch, address pool, address token, uint256 amount);
 
     /* -------------------------------------------------------------------
-       Constructor 
+       Constructor
     ------------------------------------------------------------------- */
 
     /**
      * @param _booster The booster
+     * @param _merklDistributionCreator The Merkl Distributor Creator
      */
-    constructor(address _booster) {
-        booster = IBoosterOrBoosterLite(_booster);
+    constructor(address _booster, address _merklDistributionCreator) {
+        booster = IBooster(_booster);
+        merklDistributionCreator = _merklDistributionCreator;
+        IDistributionCreator(_merklDistributionCreator).acceptConditions();
     }
 
     /* -------------------------------------------------------------------
-       View 
+       View
     ------------------------------------------------------------------- */
 
     /**
@@ -81,17 +85,13 @@ contract StashRewardDistro is IStashRewardDistro {
         uint256 _amount,
         uint256 _periods
     ) external {
-        // Keep 1 wei of the reward token for each period to faciliate
-        // processing idle rewards if needed
-        uint256 rewardAmount = _amount - _periods;
-
         // Loop through n periods and assign rewards to each epoch
         // Add 1 to the epoch so it can only be queued for the next epoch which
         // will be the next thursday. The process will be
         // fundPool is called on tuesday and adds rewards to the next epoch which
         // will start on thursday
         uint256 epoch = _getCurrentEpoch().add(1);
-        uint256 epochAmount = rewardAmount.div(_periods);
+        uint256 epochAmount = _amount.div(_periods);
         for (uint256 i = 0; i < _periods; i++) {
             getFunds[epoch][_pid][_token] = getFunds[epoch][_pid][_token].add(epochAmount);
             emit Funded(epoch, _pid, _token, epochAmount);
@@ -102,7 +102,7 @@ contract StashRewardDistro is IStashRewardDistro {
     }
 
     /**
-     * @notice Queue the current epoch's rewards to the pid's stash and calls earmark rewards
+     * @notice Queue the current epoch's rewards to the pid's stash.
      * @param _pid  The pool id to queue rewards.
      * @param _token The reward token.
      */
@@ -111,7 +111,7 @@ contract StashRewardDistro is IStashRewardDistro {
     }
 
     /**
-     * @notice Queue rewards to the pid's stash and calls earmark rewards
+     * @notice Queue rewards to the pid's stash
      *  It can only queue past or current epoch's rewards
      * @param _pid  The pool id to queue rewards.
      * @param _token The reward token.
@@ -126,33 +126,46 @@ contract StashRewardDistro is IStashRewardDistro {
         _queueRewards(_epoch, _pid, _token);
     }
 
-    /**
-     * @notice Processes queued rewards in isolation, providing the period has finished.
-     *      It sends 1 wei to the stash and call earmark rewards on the booster
-     * @param _pid  The pool id to process idle rewards.
-     * @param _token The reward token.
-     */
-    function processIdleRewards(uint256 _pid, address _token) external {
-        // Get the stash and the extra rewards contract
-        IBoosterOrBoosterLite.PoolInfo memory poolInfo = booster.poolInfo(_pid);
-        IExtraRewardStash stash = IExtraRewardStash(poolInfo.stash);
-        (, address rewards, ) = stash.tokenInfo(_token);
+    function createMerklCampaign(
+        address _pool,
+        address _token,
+        uint256 _amount,
+        uint256 _periods
+    ) external {
+        address[] memory positionWrappers = new address[](1);
+        uint32[] memory wrapperTypes = new uint32[](1);
 
-        // Check that the period finish has passed and there are queued
-        // rewards that need processing
-        uint256 periodFinish = IVirtualRewards(rewards).periodFinish();
-        uint256 queuedRewards = IVirtualRewards(rewards).queuedRewards();
-        require(block.timestamp > periodFinish, "!periodFinish");
-        require(queuedRewards != 0, "!queueRewards");
+        positionWrappers[0] = booster.staker();
+        wrapperTypes[0] = 0;
 
-        // Transfer 1 wei to the stash and call earmark to force a new
-        // queue of rewards to start
-        IERC20(_token).safeTransfer(address(stash), 1);
-        _earmarkRewards(_pid);
+        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+
+        DistributionParameters memory params = DistributionParameters({
+            rewardId: bytes32(""),
+            uniV3Pool: _pool,
+            rewardToken: _token,
+            amount: _amount,
+            positionWrappers: positionWrappers,
+            wrapperTypes: wrapperTypes,
+            propToken0: 4500,
+            propToken1: 4500,
+            propFees: 1000,
+            epochStart: uint32(block.timestamp),
+            numEpoch: uint32(_periods) * uint32(168), // 1 week (7*24)
+            isOutOfRangeIncentivized: 0,
+            boostedReward: 0, // 0x boost
+            boostingAddress: address(0),
+            additionalData: bytes("")
+        });
+
+        IERC20(_token).safeIncreaseAllowance(merklDistributionCreator, _amount);
+        IDistributionCreator(merklDistributionCreator).createDistribution(params);
+
+        emit MerklCampaign(_getCurrentEpoch(), _pool, _token, _amount);
     }
 
     /* -------------------------------------------------------------------
-       Internal 
+       Internal
     ------------------------------------------------------------------- */
 
     function _queueRewards(
@@ -164,16 +177,12 @@ contract StashRewardDistro is IStashRewardDistro {
         require(amount != 0, "!amount");
         getFunds[_epoch][_pid][_token] = 0;
 
-        IBoosterOrBoosterLite.PoolInfo memory poolInfo = booster.poolInfo(_pid);
+        IBooster.PoolInfo memory poolInfo = booster.poolInfo(_pid);
         IERC20(_token).safeTransfer(poolInfo.stash, amount);
-        _earmarkRewards(_pid);
+        emit Queued(_epoch, _pid, _token, amount);
     }
 
     function _getCurrentEpoch() internal view returns (uint256) {
         return block.timestamp.div(EPOCH_DURATION);
-    }
-
-    function _earmarkRewards(uint256 pid) internal virtual {
-        booster.earmarkRewards(pid);
     }
 }

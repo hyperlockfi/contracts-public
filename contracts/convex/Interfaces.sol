@@ -29,7 +29,7 @@ interface IWalletChecker {
 
 interface IVoting{
     function vote(uint256, bool, bool) external; //voteId, support, executeIfDecided
-    function getVote(uint256) external view returns(bool,bool,uint64,uint64,uint64,uint64,uint256,uint256,uint256,bytes memory); 
+    function getVote(uint256) external view returns(bool,bool,uint64,uint64,uint64,uint64,uint256,uint256,uint256,bytes memory);
     function vote_for_gauge_weights(address,uint256) external;
 }
 
@@ -48,7 +48,7 @@ interface IStaker{
     function release() external returns(bool);
     function claimCrv(address) external returns (uint256);
     function claimRewards(address) external returns(bool);
-    function claimFees(address,address) external returns (uint256);
+    function claimFees(address) external returns (uint256);
     function setStashAccess(address, bool) external returns (bool);
     function vote(uint256,address,bool) external returns(bool);
     function voteGaugeWeight(address,uint256) external returns(bool);
@@ -82,9 +82,10 @@ interface IStash{
 }
 
 interface IFeeDistributor {
-    function claimToken(address user, address token) external returns (uint256);
-    function claimTokens(address user, address[] calldata tokens) external returns (uint256[] memory);
-    function getTokenTimeCursor(address token) external view returns (uint256);
+    function claim(address user) external returns (uint256);
+    function token() external view returns (address);
+    function toggle_allow_checkpoint_token() external;
+    function admin() external view returns (address);
 }
 
 interface ITokenMinter{
@@ -98,10 +99,8 @@ interface IDeposit{
     function totalSupply() external view returns(uint256);
     function poolInfo(uint256) external view returns(address,address,address,address,address,bool);
     function poolLength() external view returns(uint256);
-    function rewardClaimed(uint256,address,uint256) external;
     function withdrawTo(uint256,uint256,address) external;
     function claimRewards(uint256,address) external returns(bool);
-    function rewardArbitrator() external returns(address);
     function setGaugeRedirect(uint256 _pid) external returns(bool);
     function owner() external returns(address);
     function poolManager() external returns(address);
@@ -110,6 +109,9 @@ interface IDeposit{
     function cvxCrv() external returns (address);
     function lockRewards() external returns (address);
     function stakerRewards() external returns (address);
+    function lockIncentive() external returns (uint256);
+    function stakerIncentive() external returns (uint256);
+    function earmarkIncentive() external returns (uint256);
 }
 
 interface ICrvDeposit{
@@ -128,7 +130,7 @@ interface IRewardFactory{
 
 interface IStashFactory{
     function CreateStash(uint256,address,address) external returns(address);
-    function setImplementation(address, address, address) external;
+    function setImplementation(address) external;
 }
 
 interface ITokenFactory{
